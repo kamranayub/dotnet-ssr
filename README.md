@@ -7,6 +7,9 @@ What if you could use your favorite frontend framework like React Router, Svelte
 
 This is the question this repo seeks to answer.
 
+<img width="3822" height="1584" alt="Screenshot 2025-10-01 at 00 17 01" src="https://github.com/user-attachments/assets/80defd95-0b02-4583-87d9-e153f902adc0" />
+
+
 ## The Problem
 
 There are many SSR-enabled frameworks like React Router, Next.js, Astro, Vue, and SvelteKit. They let you build full-stack JavaScript/TypeScript applications and they can be served on different JavaScript runtimes like Node.js, Deno, or bun.
