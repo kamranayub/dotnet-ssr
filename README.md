@@ -22,13 +22,13 @@ What they _can_ do is spawn a Node child process and manage communication that w
 
 So to workaround this, you can implement a "Backend-for-Frontend" (BFF) architecture where you essentially support SSR with JavaScript servers but then call into your own backend APIs through traditional web APIs (like `fetch`, or SSE, or WebSockets, etc.).
 
-However, this has an obvious problem: you are still stuck scaling _both_ frontend (JavaScript) and backend (other tech) servers for production. This is complex by its nature.
+However, this has an obvious problem: you are still stuck scaling _both_ frontend (JavaScript) and backend (other tech) servers for production. This is complex.
 
 ## The Dream
 
-In an ideal world, your SSR code should be able to "just call" your backend code without a web API layer in-between.
+In an ideal world, you'd have **one [type of] server.** Just the backend server. But you'd still write all your SSR code as TypeScript/JavaScript, and then "just call" any other backend language services _without_ a web API layer in-between.
 
-However, in order to do that, the frontend framework JavaScript code needs to be able to "interop" with the backend language.
+However, in order to do that, the frontend framework JavaScript code needs to be able to "interop" with the backend language. This is complicated because of data types, memory allocation, and all sorts of other nonsense.
 
 How do you get Node.js code, written in C++, to run in languages that _don't_ interop with C++, like WASM, C#, Rust, and Java?
 
