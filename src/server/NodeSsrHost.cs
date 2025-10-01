@@ -2,11 +2,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.JavaScript.NodeApi;
-using Microsoft.JavaScript.NodeApi.Interop;
 using Microsoft.JavaScript.NodeApi.Runtime;
 
 public record SsrResult(int Status, string Html);
@@ -15,12 +16,17 @@ public sealed class NodeSsrHost : IAsyncDisposable
 {
     private readonly NodeEmbeddingThreadRuntime _rt;
 
-    public NodeSsrHost(string projectDir, string libnodePath)
+    public NodeSsrHost(string projectDir)
     {
-        // Find the path to the libnode binary for the current platform.
+        var baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+        var rid = RuntimeInformation.RuntimeIdentifier;
+        var libExt = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dll"
+                      : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "dylib"
+                      : "so";
+
         NodeEmbeddingPlatform platform = new(new NodeEmbeddingPlatformSettings()
         {
-            LibNodePath = libnodePath
+            LibNodePath = Path.Combine(baseDir, "runtimes", rid, "native", $"libnode.{libExt}")
         });
 
         _rt = platform.CreateThreadRuntime(projectDir,

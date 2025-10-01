@@ -1,27 +1,19 @@
-// /src/Server/Program.cs
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using System;
 using System.IO;
-using System.Reflection;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Choose where Node will look for your bundled SSR files
-var baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
 var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "web"));
 var assetsRoot = Path.Combine(projectDir, "build", "client", "assets");
 var clientRoot = Path.Combine(projectDir, "build", "client");
 
-builder.Services.AddSingleton(_ => new NodeSsrHost(projectDir, Path.Combine(baseDir, "runtimes/osx-arm64/native/libnode.dylib")));
+builder.Services.AddSingleton(_ => new NodeSsrHost(projectDir));
 
 var app = builder.Build();
-
-app.MapStaticAssets().ShortCircuit();
 
 if (Directory.Exists(assetsRoot))
 {
@@ -41,7 +33,7 @@ if (Directory.Exists(clientRoot))
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new PhysicalFileProvider(clientRoot),
-        RequestPath  = "",
+        RequestPath = "",
         OnPrepareResponse = ctx =>
         {
             ctx.Context.Response.Headers.CacheControl = "public, max-age=300";
