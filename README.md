@@ -45,3 +45,15 @@ Right now the C API is _highly experimental_ and in draft -- it's not even merge
 That said, Microsoft has still built [node-api-dotnet](https://microsoft.github.io/node-api-dotnet/) for use in Semantic Kernel and that's what I'm using.
 
 I'm choosing [React Router](https://reactrouter.com) to experiment with first because it can be used as a full framework, supports React Server Components (RSC), and it's what I'm using on my frontend -- so it's personal :smile:
+
+# Building
+
+## Prerequisites
+
+- Node.js LTS
+- .NET 8 LTS
+- **Windows:** [VC++ 2022 redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
+
+## Notes
+
+- On Windows, if the server crashes immediately when a request is handled, there is likely an issue with loading `libnode.dll` on your machine. I had to make sure I installed the latest VC++ 2022 redistributable for it to work. (e.g. `Server.exe' has exited with code -1073740791 (0xc0000409)`)

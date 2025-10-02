@@ -1,4 +1,3 @@
-// /src/Server/NodeSsrHost.cs
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -16,25 +15,14 @@ public sealed class NodeSsrHost : IAsyncDisposable
 {
     private readonly NodeEmbeddingThreadRuntime _rt;
 
-    public NodeSsrHost(string projectDir)
+    public NodeSsrHost(string projectDir, string? libNodePath = null)
     {
-        var baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
-        var rid = RuntimeInformation.RuntimeIdentifier;
-        var libExt = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dll"
-                      : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "dylib"
-                      : "so";
-
         NodeEmbeddingPlatform platform = new(new NodeEmbeddingPlatformSettings()
         {
-            LibNodePath = Path.Combine(baseDir, "runtimes", rid, "native", $"libnode.{libExt}")
+            LibNodePath = libNodePath
         });
 
-        _rt = platform.CreateThreadRuntime(projectDir,
-        new NodeEmbeddingRuntimeSettings
-        {
-            MainScript =
-                "globalThis.require = require('module').createRequire(process.execPath);\n"
-        });
+        _rt = platform.CreateThreadRuntime(projectDir);
 
         if (Debugger.IsAttached)
         {

@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "name": "C#: Launch Startup Project",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/src/server/Server.csproj"      
+        }
+    ]
+}
