@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -7,9 +8,10 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.JavaScript.NodeApi;
+using Microsoft.JavaScript.NodeApi.Interop;
 using Microsoft.JavaScript.NodeApi.Runtime;
 
-public record SsrResult(int Status, string Html);
+public record SsrResult(int Status, string ContentType, IAsyncEnumerable<ReadOnlyMemory<byte>> HtmlChunks);
 
 public sealed class NodeSsrHost : IAsyncDisposable
 {
@@ -32,9 +34,9 @@ public sealed class NodeSsrHost : IAsyncDisposable
         }
     }
 
-    public async Task<SsrResult> RenderAsync(HttpRequest request)
+    public async Task RenderAsync(HttpRequest request, HttpResponse response)
     {
-        return await _rt.RunAsync(async () =>
+        await _rt.RunAsync(async () =>
         {
             var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
             var req = JSValue.CreateObject();
@@ -55,25 +57,53 @@ public sealed class NodeSsrHost : IAsyncDisposable
 
             /* type: https://developer.mozilla.org/en-US/docs/Web/API/Response */
             var res = await handler.Value.AsTask();
+            var status = (int)res["status"];
             var body = res["body"];
+            var contentType = (string?)res["headers"].CallMethod("get", "content-type") ?? "text/html; charset=utf-8";
+
+            response.StatusCode = status;
+            response.ContentType = contentType;
 
             if (body.IsNullOrUndefined())
             {
-                return new SsrResult(
-                    Status: (int)res["status"],
-                    Html: "<div>No body</div>"
-                );
+                return;
             }
 
-            var status = (int)res["status"];
-            var bodyPromise = res.CallMethod("text").As<JSPromise>()!.Value;
-            var bodyContents = (string)await bodyPromise.AsTask();
+            /* @type ReadableStream */
+            var bodyDefaultReadableStream = res["body"].CallMethod("getReader");
 
-            return new SsrResult(
-                Status: status,
-                Html: bodyContents
-            );
+            await foreach (var chunk in ReadFromDefaultReadableStreamAsync(bodyDefaultReadableStream))
+            {
+                await response.BodyWriter.WriteAsync(chunk);
+                await response.BodyWriter.FlushAsync();
+            }
         });
+
+    }
+
+    private async IAsyncEnumerable<ReadOnlyMemory<byte>> ReadFromDefaultReadableStreamAsync(JSValue readableStreamDefaultReader)
+    {
+        using var asyncScope = new JSAsyncScope();
+        using JSReference nodeStreamReference = new(readableStreamDefaultReader);
+        
+        var charsReceived = 0;
+        while (true)
+        {
+            readableStreamDefaultReader = nodeStreamReference.GetValue();
+            var readPromise = readableStreamDefaultReader.CallMethod("read").As<JSPromise>();
+            var readResult = await readPromise.Value.AsTask();
+            var done = (bool)readResult["done"];
+            if (done)
+            {
+                break;
+            }
+
+            var chunk = (JSTypedArray<byte>)readResult["value"];
+            var chunkSize = chunk.Length;
+            charsReceived += chunkSize;
+
+            yield return chunk.Memory;
+        }
     }
 
     public ValueTask DisposeAsync()
