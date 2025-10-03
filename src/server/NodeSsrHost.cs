@@ -103,18 +103,16 @@ public sealed class NodeSsrHost : IAsyncDisposable
                 return;
             }
 
-            /* @type ReadableStream */
-            var reader = res["body"].CallMethod("getReader");
-
-            await WriteReadableStreamToResponseBody(reader, response.BodyWriter, request.HttpContext.RequestAborted);
+            await WriteReadableStreamToResponseBody(res["body"], response.BodyWriter, request.HttpContext.RequestAborted);
             await response.BodyWriter.FlushAsync(request.HttpContext.RequestAborted);
         });
 
     }
 
-    private async Task WriteReadableStreamToResponseBody(JSValue readableStreamDefaultReader, PipeWriter writer, CancellationToken cancellationToken)
+    private async Task WriteReadableStreamToResponseBody(JSValue readableStream, PipeWriter writer, CancellationToken cancellationToken)
     {
         using var asyncScope = new JSAsyncScope();
+        var readableStreamDefaultReader = readableStream.CallMethod("getReader");
         using JSReference nodeStreamReference = new(readableStreamDefaultReader);
 
         while (true)
