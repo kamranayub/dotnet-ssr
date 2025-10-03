@@ -19,7 +19,6 @@ public record SsrResult(int Status, string ContentType, IAsyncEnumerable<ReadOnl
 public sealed class NodeSsrHost : IAsyncDisposable
 {
     private readonly NodeEmbeddingThreadRuntime _rt;
-    private JSReference? _serverHandlerRef;
 
     public NodeSsrHost(string projectDir, string? libNodePath = null)
     {
@@ -29,15 +28,6 @@ public sealed class NodeSsrHost : IAsyncDisposable
         });
 
         _rt = platform.CreateThreadRuntime(projectDir);
-
-        // Warm up Node & cache handler
-        _rt.RunAsync(async () =>
-        {
-            var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
-            var handler = mod.GetProperty("default");
-            _serverHandlerRef = new JSReference(handler); // keep alive across requests
-            return 0;
-        }).GetAwaiter().GetResult();
 
         if (Debugger.IsAttached)
         {
@@ -51,11 +41,8 @@ public sealed class NodeSsrHost : IAsyncDisposable
     {
         await _rt.RunAsync(async () =>
         {
-            if (_serverHandlerRef == null)
-            {
-                throw new InvalidOperationException("No reference to SSR request handler");
-            }
-            var handlerJs = _serverHandlerRef.GetValue();
+            var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
+            var handlerJs = mod.GetProperty("default");
             var abortController = JSValue.Global["AbortController"].CallAsConstructor();
             var webRequest = JSValue.Global["Request"];
             var jsHeaders = JSValue.Global["Headers"].CallAsConstructor();
@@ -83,15 +70,10 @@ public sealed class NodeSsrHost : IAsyncDisposable
             });
 
             var req = webRequest.CallAsConstructor(request.GetDisplayUrl(), requestInit);
-            var handler = handlerJs.Call(handlerJs, req).As<JSPromise>();
-
-            if (handler == null)
-            {
-                throw new InvalidOperationException("React Router handler is not returning an expected JSPromise");
-            }
+            var handler = handlerJs.Call(handlerJs, req).As<JSPromise>() ?? throw new InvalidOperationException("React Router handler is not returning an expected JSPromise");
 
             /* type: https://developer.mozilla.org/en-US/docs/Web/API/Response */
-            var res = await handler.Value.AsTask(request.HttpContext.RequestAborted);
+            var res = await handler.AsTask(request.HttpContext.RequestAborted);
             var status = (int)res["status"];
             var body = res["body"];
             var contentType = (string?)res["headers"].CallMethod("get", "content-type") ?? "text/html; charset=utf-8";
