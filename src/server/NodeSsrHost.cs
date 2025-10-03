@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -104,38 +105,41 @@ public sealed class NodeSsrHost : IAsyncDisposable
             }
 
             await WriteReadableStreamToResponseBody(res["body"], response.BodyWriter, request.HttpContext.RequestAborted);
-            await response.BodyWriter.FlushAsync(request.HttpContext.RequestAborted);
         });
 
     }
 
     private async Task WriteReadableStreamToResponseBody(JSValue readableStream, PipeWriter writer, CancellationToken cancellationToken)
     {
-        using var asyncScope = new JSAsyncScope();
-        var readableStreamDefaultReader = readableStream.CallMethod("getReader");
-        using JSReference nodeStreamReference = new(readableStreamDefaultReader);
+        var readable = _rt.Import("node:stream", "Readable");
+        var nodeReadable = readable.CallMethod("fromWeb", readableStream);
 
-        while (true)
+        using var nodeStream = (NodeStream)nodeReadable;
+        const int ReadChunkSize = 4096;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(ReadChunkSize);
+        try
         {
-            readableStreamDefaultReader = nodeStreamReference.GetValue();
-            var readPromise = readableStreamDefaultReader.CallMethod("read").As<JSPromise>()!;
-            var readResult = await readPromise.Value.AsTask(cancellationToken);
-            var done = (bool)readResult["done"];
-            if (done)
+            int n;
+            while ((n = await nodeStream.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                break;
+                await writer.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, n), cancellationToken);
             }
-
-            var chunk = (JSTypedArray<byte>)readResult["value"];
-            var len = chunk.Length;
-
-            // rent once per chunk
-            var owner = System.Buffers.MemoryPool<byte>.Shared.Rent(len);
-
-            // copy from V8 buffer to managed memory you control
-            chunk.Memory.Span[..len].CopyTo(owner.Memory.Span);
-
-            await writer.WriteAsync(owner.Memory[..len], cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                nodeReadable.CallMethod("destroy", new JSError(ex).Value);
+            }
+            catch (Exception)
+            {
+                // Ignore errors from destroy().
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            await writer.FlushAsync(cancellationToken);
         }
     }
 
