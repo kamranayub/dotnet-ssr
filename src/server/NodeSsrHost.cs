@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -16,6 +18,7 @@ public record SsrResult(int Status, string ContentType, IAsyncEnumerable<ReadOnl
 public sealed class NodeSsrHost : IAsyncDisposable
 {
     private readonly NodeEmbeddingThreadRuntime _rt;
+    private JSReference? _serverHandlerRef;
 
     public NodeSsrHost(string projectDir, string? libNodePath = null)
     {
@@ -25,6 +28,15 @@ public sealed class NodeSsrHost : IAsyncDisposable
         });
 
         _rt = platform.CreateThreadRuntime(projectDir);
+
+        // Warm up Node & cache handler
+        _rt.RunAsync(async () =>
+        {
+            var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
+            var handler = mod.GetProperty("default");
+            _serverHandlerRef = new JSReference(handler); // keep alive across requests
+            return 0;
+        }).GetAwaiter().GetResult();
 
         if (Debugger.IsAttached)
         {
@@ -38,17 +50,39 @@ public sealed class NodeSsrHost : IAsyncDisposable
     {
         await _rt.RunAsync(async () =>
         {
-            var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
-            var req = JSValue.CreateObject();
-            req["url"] = request.GetDisplayUrl();
-            req["method"] = request.Method;
-            req["headers"] = ToJSMap(request.Headers);
-            var global = JSValue.Global;
-            var abortController = global["AbortController"].CallAsConstructor();
-            req["signal"] = abortController["signal"];
+            if (_serverHandlerRef == null)
+            {
+                throw new InvalidOperationException("No reference to SSR request handler");
+            }
+            var handlerJs = _serverHandlerRef.GetValue();
+            var abortController = JSValue.Global["AbortController"].CallAsConstructor();
+            var webRequest = JSValue.Global["Request"];
+            var jsHeaders = JSValue.Global["Headers"].CallAsConstructor();
 
-            /* TODO: body */
-            var handler = mod.CallMethod("default" /* export handler as default */, req).As<JSPromise>();
+            foreach (var (k, v) in request.Headers)
+            {
+                foreach (var val in v)
+                {
+                    if (val != null)
+                    {
+                        jsHeaders.CallMethod("append", k, val);
+                    }
+                }
+            }
+
+            var requestInit = JSValue.CreateObject();
+            requestInit["method"] = request.Method;
+            requestInit["headers"] = jsHeaders;
+            requestInit["signal"] = abortController["signal"];
+            /* TODO: body if needed */
+
+            using var reg = request.HttpContext.RequestAborted.Register(() =>
+            {
+                abortController.CallMethod("abort");
+            });
+
+            var req = webRequest.CallAsConstructor(request.GetDisplayUrl(), requestInit);
+            var handler = handlerJs.Call(handlerJs, req).As<JSPromise>();
 
             if (handler == null)
             {
@@ -56,7 +90,7 @@ public sealed class NodeSsrHost : IAsyncDisposable
             }
 
             /* type: https://developer.mozilla.org/en-US/docs/Web/API/Response */
-            var res = await handler.Value.AsTask();
+            var res = await handler.Value.AsTask(request.HttpContext.RequestAborted);
             var status = (int)res["status"];
             var body = res["body"];
             var contentType = (string?)res["headers"].CallMethod("get", "content-type") ?? "text/html; charset=utf-8";
@@ -70,28 +104,24 @@ public sealed class NodeSsrHost : IAsyncDisposable
             }
 
             /* @type ReadableStream */
-            var bodyDefaultReadableStream = res["body"].CallMethod("getReader");
+            var reader = res["body"].CallMethod("getReader");
 
-            await foreach (var chunk in ReadFromDefaultReadableStreamAsync(bodyDefaultReadableStream))
-            {
-                await response.BodyWriter.WriteAsync(chunk);
-                await response.BodyWriter.FlushAsync();
-            }
+            await WriteReadableStreamToResponseBody(reader, response.BodyWriter, request.HttpContext.RequestAborted);
+            await response.BodyWriter.FlushAsync(request.HttpContext.RequestAborted);
         });
 
     }
 
-    private async IAsyncEnumerable<ReadOnlyMemory<byte>> ReadFromDefaultReadableStreamAsync(JSValue readableStreamDefaultReader)
+    private async Task WriteReadableStreamToResponseBody(JSValue readableStreamDefaultReader, PipeWriter writer, CancellationToken cancellationToken)
     {
         using var asyncScope = new JSAsyncScope();
         using JSReference nodeStreamReference = new(readableStreamDefaultReader);
-        
-        var charsReceived = 0;
+
         while (true)
         {
             readableStreamDefaultReader = nodeStreamReference.GetValue();
-            var readPromise = readableStreamDefaultReader.CallMethod("read").As<JSPromise>();
-            var readResult = await readPromise.Value.AsTask();
+            var readPromise = readableStreamDefaultReader.CallMethod("read").As<JSPromise>()!;
+            var readResult = await readPromise.Value.AsTask(cancellationToken);
             var done = (bool)readResult["done"];
             if (done)
             {
@@ -99,10 +129,15 @@ public sealed class NodeSsrHost : IAsyncDisposable
             }
 
             var chunk = (JSTypedArray<byte>)readResult["value"];
-            var chunkSize = chunk.Length;
-            charsReceived += chunkSize;
+            var len = chunk.Length;
 
-            yield return chunk.Memory;
+            // rent once per chunk
+            var owner = System.Buffers.MemoryPool<byte>.Shared.Rent(len);
+
+            // copy from V8 buffer to managed memory you control
+            chunk.Memory.Span[..len].CopyTo(owner.Memory.Span);
+
+            await writer.WriteAsync(owner.Memory[..len], cancellationToken);
         }
     }
 
