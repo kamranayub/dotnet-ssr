@@ -122,7 +122,7 @@ public sealed class NodeSsrHost : IAsyncDisposable
             int n;
             while ((n = await nodeStream.ReadAsync(buffer, cancellationToken)) > 0)
             {
-                await writer.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, n), cancellationToken);
+                await writer.WriteAsync(buffer.AsMemory(0, n), cancellationToken);
             }
         }
         catch (Exception ex)
