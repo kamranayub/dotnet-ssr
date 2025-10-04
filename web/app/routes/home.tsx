@@ -1,10 +1,27 @@
 import type { Route } from "./+types/home";
 import { Welcome } from "../welcome/welcome";
 
+declare namespace SharedMath {
+	export function add(
+		a: number,
+		b: number,
+	): number;
+}
+
+declare global {
+  var dotnet: DotNetGlobal;
+}
+
+interface DotNetGlobal {
+  SharedMath: typeof SharedMath;
+}
+
 export async function loader() {
+  // TODO: Maybe an issue?
+  // https://github.com/microsoft/node-api-dotnet/issues/330
   return {
-    message: "Message from the server!",
-    element: <p>Element from the server!</p>,
+    message: "Calling .NET from SSR loader!",
+    element: <p>2 + 2 = {dotnet.SharedMath.add(2, 2)}</p>,
   };
 }
 

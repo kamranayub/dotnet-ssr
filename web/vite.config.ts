@@ -7,6 +7,11 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import mdx from '@mdx-js/rollup'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      external: ["node-api-dotnet"]
+    }
+  },
   plugins: [
     tailwindcss(),
     tsconfigPaths(),
@@ -15,4 +20,5 @@ export default defineConfig({
     rsc(),
     devtoolsJson(),
   ],
+  
 });

@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.JavaScript.NodeApi;
 using Microsoft.JavaScript.NodeApi.Interop;
 using Microsoft.JavaScript.NodeApi.Runtime;
+using SharedLib;
 
 public record SsrResult(int Status, string ContentType, IAsyncEnumerable<ReadOnlyMemory<byte>> HtmlChunks);
 
@@ -37,10 +38,37 @@ public sealed class NodeSsrHost : IAsyncDisposable
         }
     }
 
+    private static int AsInt32(JSCallbackArgs args, int argIndex)
+    {
+        if (!args[argIndex].IsNumber())
+        {
+            throw new JSException(new JSError(
+                $"Wrong type of args[{argIndex}]. Expects a number.",
+                JSErrorType.TypeError));
+        }
+
+        return (int)args[argIndex];
+    }
+
     public async Task RenderAsync(HttpRequest request, HttpResponse response)
     {
         await _rt.RunAsync(async () =>
         {
+            /* Try to attach dotnet functions globally? */
+            var sharedMathAdd = JSValue.CreateFunction("add", args =>
+            {
+                var a = AsInt32(args, 0);
+                var b = AsInt32(args, 1);
+                return SharedMath.Add(a, b);
+            }, IntPtr.Zero);
+
+            var dotnetMethods = JSValue.CreateObject();
+            var sharedMathModule = JSValue.CreateObject();
+            dotnetMethods["SharedMath"] = sharedMathModule;
+            sharedMathModule["add"] = sharedMathAdd;
+
+            JSValue.Global.SetProperty("dotnet", dotnetMethods);
+
             var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
             var handlerJs = mod.GetProperty("default");
             var abortController = JSValue.Global["AbortController"].CallAsConstructor();
