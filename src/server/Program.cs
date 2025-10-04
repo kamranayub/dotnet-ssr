@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using SharedLib;
 using System;
 using System.IO;
 
@@ -11,7 +12,7 @@ var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "
 var assetsRoot = Path.Combine(projectDir, "build", "client", "assets");
 var clientRoot = Path.Combine(projectDir, "build", "client");
 
-builder.Services.AddSingleton(_ => new NodeSsrHost(projectDir));
+builder.Services.AddSingleton(_ => new NodeSsrHost(projectDir, sharedAssemblies: [typeof(SharedMath).Assembly]));
 
 var app = builder.Build();
 
