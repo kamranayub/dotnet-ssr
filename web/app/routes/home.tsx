@@ -1,12 +1,13 @@
 import type { Route } from "./+types/home";
 import { Welcome } from "../welcome/welcome";
+import { SharedMath } from "lib/SharedLib";
 
 export async function loader() {
   // TODO: Maybe an issue?
   // https://github.com/microsoft/node-api-dotnet/issues/330
   return {
     message: "Calling .NET from SSR loader!",
-    element: <p>2 + 2 = {dotnet.SharedLib.SharedMath.add(2, 2)}</p>,
+    element: <p>2 + 2 = {SharedMath.add(2, 2)}</p>,
   };
 }
 

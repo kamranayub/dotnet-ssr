@@ -3,7 +3,8 @@
     "Development": {
       "commandName": "Project",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "NODE_API_TRACE_HOST": "1"
       },
       "applicationUrl": "https://localhost:5001;http://localhost:5000"
     }

@@ -1,0 +1,16 @@
+diff --git a/node_modules/node-api-dotnet/init.js b/node_modules/node-api-dotnet/init.js
+index 9cd91ca..c7504ca 100644
+--- a/node_modules/node-api-dotnet/init.js
++++ b/node_modules/node-api-dotnet/init.js
+@@ -75,6 +75,10 @@ function initialize(targetFramework) {
+   // Since `import` is a keyword and not a function it has to be wrapped in a function value.
+   const importModule = function importModule(modulePath) { return import(modulePath); };
+ 
+-  dotnet = nativeHost.initialize(targetFramework, managedHostPath, require, importModule);
++  if (globalThis.dotnetHost) {
++    dotnet = globalThis.dotnetHost;
++  } else {
++    dotnet = nativeHost.initialize(targetFramework, managedHostPath, require, importModule);
++  }
+   return dotnet;
+ }

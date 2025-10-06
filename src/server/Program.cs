@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
 using SharedLib;
 using System;
 using System.IO;
@@ -12,7 +13,8 @@ var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "
 var assetsRoot = Path.Combine(projectDir, "build", "client", "assets");
 var clientRoot = Path.Combine(projectDir, "build", "client");
 
-builder.Services.AddSingleton(_ => new NodeSsrHost(projectDir, sharedAssemblies: [typeof(SharedMath).Assembly]));
+builder.Services.AddSingleton(services =>
+    new NodeSsrHost(services.GetService<ILogger<NodeSsrHost>>()!, projectDir, sharedAssemblies: [typeof(SharedMath).Assembly]));
 
 var app = builder.Build();
 
@@ -45,7 +47,7 @@ if (Directory.Exists(clientRoot))
 app.UseRouting();
 app.MapGet("/{**path}", async (HttpContext ctx, NodeSsrHost host) =>
 {
-    await host.RenderAsync(ctx.Request, ctx.Response);    
+    await host.RenderAsync(ctx.Request, ctx.Response);
 });
 
 app.Run();

@@ -9,7 +9,12 @@ import mdx from '@mdx-js/rollup'
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ["node-api-dotnet"]
+      external: ["node-api-dotnet/net8.0", "lib/SharedLib"],
+      output: {
+        paths: {
+          "lib/SharedLib": "../../../lib/SharedLib.mjs"
+        }
+      }
     }
   },
   plugins: [

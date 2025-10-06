@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.JavaScript.NodeApi;
 using Microsoft.JavaScript.NodeApi.DotNetHost;
 using Microsoft.JavaScript.NodeApi.Interop;
@@ -22,17 +23,21 @@ public record SsrResult(int Status, string ContentType, IAsyncEnumerable<ReadOnl
 public sealed class NodeSsrHost : IAsyncDisposable
 {
     private readonly NodeEmbeddingThreadRuntime _rt;
+    private readonly ILogger<NodeSsrHost> _logger;
     private readonly IEnumerable<Assembly>? _sharedAssemblies;
 
-    public NodeSsrHost(string projectDir, IEnumerable<Assembly>? sharedAssemblies = null, string? libNodePath = null)
+    public NodeSsrHost(ILogger<NodeSsrHost> logger, string projectDir, IEnumerable<Assembly>? sharedAssemblies = null, string? libNodePath = null)
     {
         NodeEmbeddingPlatform platform = new(new NodeEmbeddingPlatformSettings()
         {
             LibNodePath = libNodePath
         });
+        
+        _logger = logger;
         _sharedAssemblies = sharedAssemblies;
+        _logger.LogDebug("Creating JS runtime");
         _rt = platform.CreateThreadRuntime(projectDir);
-        LoadDotNetGlobalsIntoRuntime();
+        LoadDotNetManagedHost();
 
         if (Debugger.IsAttached)
         {
@@ -43,48 +48,24 @@ public sealed class NodeSsrHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// Discovers and loads all [JSExport] types into the `dotnet` global for
-    /// JS code to execute and interop with.
+    /// Creates a ManagedHost that will allow interop with generated modules
+    /// when running under SSR (which already has a CLR host initialized)
     /// </summary>
     /// <remarks>
     /// See: https://github.com/microsoft/node-api-dotnet/issues/330
     /// </remarks>
-    private void LoadDotNetGlobalsIntoRuntime()
+    private void LoadDotNetManagedHost()
     {
         if (_sharedAssemblies == null) return;
 
         _rt.Run(() =>
         {
-            // Set JSMarshaller.Current because it is usually set by ManagedHost.
-            typeof(JSMarshaller)
-                .GetField("s_current", BindingFlags.Static | BindingFlags.NonPublic)!
-                .SetValue(null, new JSMarshaller()
-                {
-                    AutoCamelCase = true
-                });
-
             JSObject managedTypes = (JSObject)JSValue.CreateObject();
-            JSValue.Global.SetProperty("dotnet", managedTypes);
+            JSValue.Global.SetProperty("dotnetHost", managedTypes);
+            ManagedHost managedHost = new(managedTypes);
 
-            TypeExporter te = new TypeExporter(JSMarshaller.Current, managedTypes);
-            var exportedJsTypes =
-                (from assembly in _sharedAssemblies
-                    from type in assembly.GetTypes()
-                    let attributes = type.GetCustomAttributes(typeof(JSExportAttribute), true)
-                    where attributes != null && attributes.Length > 0
-                    group type by type.Assembly into g
-                    select new { Assembly = g.Key, Types = g })
-                    .ToList();
+            _logger.LogInformation("Loaded ManagedHost");
 
-            exportedJsTypes.ForEach((exportGroup) =>
-            {
-                te.ExportAssemblyTypes(exportGroup.Assembly);
-                foreach (var exportedType in exportGroup.Types)
-                {
-                    te.ExportType(exportedType);
-                }
-            });
-            
             return 0;
         });
     }
@@ -93,12 +74,17 @@ public sealed class NodeSsrHost : IAsyncDisposable
     {
         await _rt.RunAsync(async () =>
         {
-
+            _logger.LogDebug("Importing SSR server");
             var mod = await _rt.ImportAsync("./build/server/index.js", esModule: true);
             var handlerJs = mod.GetProperty("default");
             var abortController = JSValue.Global["AbortController"].CallAsConstructor();
             var webRequest = JSValue.Global["Request"];
             var jsHeaders = JSValue.Global["Headers"].CallAsConstructor();
+
+            var dotnetHost = JSValue.Global["dotnetHost"];
+            _logger.LogTrace("dotNetHost properties: {0}", string.Join(", ", dotnetHost.GetPropertyNames().As<JSArray>()!.Value.Select(val => (string)val)));
+            _logger.LogTrace("dotNetHost.require defined? {0}", !dotnetHost["require"].IsNullOrUndefined());
+            _logger.LogTrace("dotNetHost.require is fn? {0}", dotnetHost["require"].IsFunction());
 
             foreach (var (k, v) in request.Headers)
             {
@@ -122,6 +108,8 @@ public sealed class NodeSsrHost : IAsyncDisposable
                 abortController.CallMethod("abort");
             });
 
+            _logger.LogDebug("Invoking SSR handler with request");
+
             var req = webRequest.CallAsConstructor(request.GetDisplayUrl(), requestInit);
             var handler = handlerJs.Call(handlerJs, req).As<JSPromise>() ?? throw new InvalidOperationException("React Router handler is not returning an expected JSPromise");
 
@@ -131,6 +119,8 @@ public sealed class NodeSsrHost : IAsyncDisposable
             var body = res["body"];
             var contentType = (string?)res["headers"].CallMethod("get", "content-type") ?? "text/html; charset=utf-8";
 
+            _logger.LogDebug("Received SSR response");
+
             response.StatusCode = status;
             response.ContentType = contentType;
 
@@ -138,6 +128,8 @@ public sealed class NodeSsrHost : IAsyncDisposable
             {
                 return;
             }
+
+            _logger.LogDebug("Reading SSR body stream");
 
             await WriteReadableStreamToResponseBody(res["body"], response.BodyWriter, request.HttpContext.RequestAborted);
         });
@@ -169,6 +161,7 @@ public sealed class NodeSsrHost : IAsyncDisposable
             catch (Exception)
             {
                 // Ignore errors from destroy().
+                _logger.LogWarning(ex, "Error trying to destroy Readable during body stream");
             }
         }
         finally
@@ -182,25 +175,5 @@ public sealed class NodeSsrHost : IAsyncDisposable
     {
         _rt.Dispose();
         return ValueTask.CompletedTask;
-    }
-
-    private static JSMap ToJSMap(IHeaderDictionary h)
-    {
-        var map = new JSMap();
-
-        foreach (var kv in h)
-        {
-            var value = new JSArray();
-            foreach (var val in kv.Value)
-            {
-                if (val != null)
-                {
-                    value.Add(val);
-                }
-            }
-            map.Add(kv.Key, value);
-        }
-
-        return map;
     }
 }
