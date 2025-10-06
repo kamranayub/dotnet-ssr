@@ -1,7 +1,7 @@
-# dotnet-ssr
+# .NET SSR Host
 
 > [!CAUTION]
-> There be dragons here. :dragon:
+> There be dragons here. :dragon: This is still in experiment/prototyping mode and has yet to be tested with a full production .NET app.
 
 What if you could use your favorite frontend framework like React Router, Svelte, Vue, Astro, etc. and take advantage of a .NET backend that supports SSR natively?
 
@@ -9,6 +9,84 @@ This is the question this repo seeks to answer.
 
 <img width="3822" height="1584" alt="Screenshot 2025-10-01 at 00 17 01" src="https://github.com/user-attachments/assets/80defd95-0b02-4583-87d9-e153f902adc0" />
 
+# Quick Look
+
+**app/routes/home.tsx**
+
+The React Router home route:
+
+```ts
+import type { Route } from "./+types/home";
+
+/**
+ *  This ESM module is auto-generated on dotnet build:
+ * - lib/SharedLib.mjs
+ * - lib/SharedLib.d.ts
+*/
+import { SharedMath } from "lib/SharedLib";
+
+export async function loader() {
+  return {
+    message: "Calling .NET from SSR loader!",
+    element: <p>2 + 2 = {SharedMath.add(2, 2)}</p>,
+  };
+}
+
+export function ServerComponent({ loaderData }: Route.ComponentProps) {
+  const { element, message } = loaderData;
+
+  return (
+    <>
+      <div className="flex justify-center items-center">
+        <div className="p-8 rounded-lg border border-gray-300 shadow-md">
+          <h1 className="text-2xl font-bold">{message}</h1>
+          <div>{element}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+```
+
+**shared-lib/SharedLib/SharedMath.cs**
+
+The shared .NET math utility:
+
+```c#
+using Microsoft.JavaScript.NodeApi;
+
+namespace SharedLib;
+
+[JSExport]
+public static class SharedMath
+{
+    public static int Add(int a, int b) => a + b;
+}
+```
+
+Running the app:
+
+```sh
+# In dev mode
+cd web
+npm run dev
+
+# In prod mode
+cd web
+npm run build
+cd ../src/server
+dotnet run
+```
+
+## Features
+
+- :white_check_mark: React Router 7 Framework Mode support
+- :white_check_mark: React 19 and React Server Components (RSC)
+- :white_check_mark: Calling .NET code from `loader`
+- :white_check_mark: Works in `npm run dev` and `dotnet run` (SSR)
+- :white_check_mark: .NET ESM with generated TypeScript typedefs (`.d.ts`)
+
+# Motivation
 
 ## The Problem
 
@@ -50,10 +128,10 @@ I'm choosing [React Router](https://reactrouter.com) to experiment with first be
 
 ## Prerequisites
 
-- Node.js LTS
-- .NET 8 LTS
-- **Windows:** [VC++ 2022 redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
+- Node.js 20
+- .NET 8
 
 ## Notes
 
-- On Windows, if the server crashes immediately when a request is handled, there is likely an issue with loading `libnode.dll` on your machine. I had to make sure I installed the latest VC++ 2022 redistributable for it to work. (e.g. `Server.exe' has exited with code -1073740791 (0xc0000409)`)
+- In .NET 9, Windows doesn't work (crashes when creating runtime) :cry:
+- In .NET 8, debugging doesn't work on macOS :cry:
