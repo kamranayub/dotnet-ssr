@@ -1,7 +1,11 @@
 # .NET SSR Host
 
 > [!CAUTION]
-> There be dragons here. :dragon: This is still in experiment/prototyping mode and has yet to be tested with a full production .NET app.
+> There be dragons here. :dragon: 
+> 
+> This is still in experiment/prototyping mode and has yet to be tested with a full production .NET app.
+>
+> **There is no Nuget package available yet as I'm still playing with the API.**
 
 What if you could use your favorite frontend framework like React Router, Svelte, Vue, Astro, etc. and take advantage of a .NET backend that supports SSR natively?
 
@@ -133,5 +137,5 @@ I'm choosing [React Router](https://reactrouter.com) to experiment with first be
 
 ## Notes
 
-- In .NET 9, Windows doesn't work (crashes when creating runtime) :cry:
-- In .NET 8, debugging doesn't work on macOS :cry:
+- In .NET 9, Windows doesn't work (crashes when creating runtime) :cry: ([issue](https://github.com/microsoft/node-api-dotnet/issues/440))
+- In .NET 8, debugging the server project doesn't work :cry: ([issue](https://github.com/microsoft/node-api-dotnet/issues/440))
