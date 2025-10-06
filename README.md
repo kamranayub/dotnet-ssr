@@ -13,6 +13,9 @@ This is the question this repo seeks to answer.
 
 <img width="3822" height="1584" alt="Screenshot 2025-10-01 at 00 17 01" src="https://github.com/user-attachments/assets/80defd95-0b02-4583-87d9-e153f902adc0" />
 
+<img width="1224" height="780" alt="SSR Performance Comparison: Node js vs  NET" src="https://github.com/user-attachments/assets/743242ac-e472-492b-9c38-2725c4d2f032" />
+
+
 # Quick Look
 
 **app/routes/home.tsx**
