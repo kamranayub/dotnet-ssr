@@ -7,16 +7,48 @@
 >
 > **There is no Nuget package available yet as I'm still playing with the API.**
 
-What if you could use your favorite JavaScript metaframework like Astro, TanStack, React Router, SvelteKit, Nuxt, Next.js, etc. and take advantage of a .NET backend that supports SSR natively?
+What if you could use your favorite JavaScript metaframework like Astro, TanStack, React Router, SvelteKit, Qwik, Nuxt, Next.js, etc. and take advantage of a .NET backend that supports SSR natively?
 
-This is the question this repo seeks to answer.
+To pass the sniff test:
+
+- No Backend-for-Frontend (BFF) needed
+- No sacrifices in local DX (ESM imports, no custom tooling, etc.)
+- Invoke your .NET code from SSR (with TypeScript declarations!)
+- Bring your own SSR-based metaframework
+- Support for React Suspense and RSC (w/ streaming)
+- It has to be fast (enough)
+
+This repo proves this can all be done, at least on a small scale:
 
 <img width="3822" height="1584" alt="Screenshot 2025-10-01 at 00 17 01" src="https://github.com/user-attachments/assets/80defd95-0b02-4583-87d9-e153f902adc0" />
 
 <img width="1224" height="780" alt="SSR Performance Comparison: Node js vs  NET" src="https://github.com/user-attachments/assets/743242ac-e472-492b-9c38-2725c4d2f032" />
 
+## Features
+
+### Tested and Working
+
+- :white_check_mark: React Router 7 Framework Mode support
+- :white_check_mark: React 19 and React Server Components (RSC)
+- :white_check_mark: Calling .NET code from React Router's `loader`
+- :white_check_mark: Works in `npm run dev` and `dotnet run` (SSR)
+- :white_check_mark: .NET ESM with generated TypeScript typedefs (`.d.ts`)
+
+### TODO
+
+- [ ] Call `use server` functions (RPC endpoints)
+- [ ] Invoke POST/other method types from frontend to React Router SSR
+- [ ] Async server components
+- [ ] Test other metaframeworks
 
 # Quick Look
+
+The prototype consists of four parts that make it work:
+
+- [node-api-dotnet](https://github.com/microsoft/node-api-dotnet), which marshals .NET <-> Node.js calls _in-process_
+- An ASP.NET request endpoint that instantiates the Node.js runtime
+- Glue code that marshals ASP.NET and Web-native req and res objects to and from the SSR entrypoint (`HttpRequest` -> `Request`, `Response` -> `HttpResponse`), with streaming support
+- A Vite plugin to rewrite .NET lib ESM import paths to DLLs
 
 **app/routes/home.tsx**
 
@@ -84,14 +116,6 @@ npm run build
 cd ../src/server
 dotnet run
 ```
-
-## Features
-
-- :white_check_mark: React Router 7 Framework Mode support
-- :white_check_mark: React 19 and React Server Components (RSC)
-- :white_check_mark: Calling .NET code from `loader`
-- :white_check_mark: Works in `npm run dev` and `dotnet run` (SSR)
-- :white_check_mark: .NET ESM with generated TypeScript typedefs (`.d.ts`)
 
 # Motivation
 
