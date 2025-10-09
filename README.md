@@ -7,7 +7,7 @@
 >
 > **There is no Nuget package available yet as I'm still playing with the API.**
 
-What if you could use your favorite frontend framework like React Router, Svelte, Vue, Astro, etc. and take advantage of a .NET backend that supports SSR natively?
+What if you could use your favorite JavaScript metaframework like Astro, TanStack, React Router, SvelteKit, Nuxt, Next.js, etc. and take advantage of a .NET backend that supports SSR natively?
 
 This is the question this repo seeks to answer.
 
