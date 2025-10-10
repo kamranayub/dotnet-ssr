@@ -24,6 +24,12 @@ This repo proves this can all be done, at least on a small scale:
 
 <img width="1224" height="780" alt="SSR Performance Comparison: Node js vs  NET" src="https://github.com/user-attachments/assets/743242ac-e472-492b-9c38-2725c4d2f032" />
 
+## Video
+
+A quick look at what's going on ([link](http://www.youtube.com/watch?v=_u2ia16_dEw))
+
+[![Explainer video for .NET SSR hosting](http://img.youtube.com/vi/_u2ia16_dEw/0.jpg)](http://www.youtube.com/watch?v=_u2ia16_dEw "Rendering React SSR in .NET")
+
 ## Features
 
 ### Tested and Working
